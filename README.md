@@ -36,8 +36,6 @@ WAN_IF=2_INTERNET_R_VID_200
 WAN_VID=200
 ```
 
-> **JANGAN commit file `.envhuawei`** — isinya kredensial asli. File ini sudah dikecualikan di `.gitignore`. Yang di-upload hanya `.envhuawei-example` (template).
-
 ### 2. Jalankan
 
 ```bash
