@@ -1,0 +1,11 @@
+# =============================================
+# CONTOH konfigurasi modem Huawei (jangan isi data asli!)
+# Salin file ini menjadi ".envhuawei" lalu isi dengan nilai milikmu:
+#   copy .envhuawei-example .envhuawei
+# =============================================
+
+MODEM_IP=192.168.100.1
+MODEM_USER=Support
+MODEM_PASS=GANTI_PASSWORD_MODEM
+WAN_IF=2_INTERNET_R_VID_200
+WAN_VID=200

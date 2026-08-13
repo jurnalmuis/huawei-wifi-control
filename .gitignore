@@ -1,0 +1,12 @@
+# =================================================================
+# HANYA UPLOAD: .envhuawei-example dan wan_toggle.py
+# Semua file lain dikecualikan (termasuk .envhuawei, kredensial, exploit)
+# =================================================================
+
+# Ignore SEMUA file dan folder
+*
+
+# Tapi izinkan ini (whitelist):
+!.gitignore
+!.envhuawei-example
+!wan_toggle.py
