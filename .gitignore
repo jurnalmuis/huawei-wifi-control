@@ -9,4 +9,5 @@
 # Tapi izinkan ini (whitelist):
 !.gitignore
 !.envhuawei-example
+!README.md
 !wan_toggle.py
