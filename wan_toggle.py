@@ -957,6 +957,8 @@ def main():
         elif choice == "2":
             if ensure_login():
                 auto_toggle()
+                print("[*] Menunggu koneksi stabil (2 detik)...")
+                time.sleep(2)
                 show_status()
         elif choice == "3":
             if ensure_login():
