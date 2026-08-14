@@ -960,7 +960,11 @@ def main():
                 show_status()
         elif choice == "3":
             if ensure_login():
-                restart_modem()
+                confirm = input("Restart modem? (y/n): ").strip().lower()
+                if confirm in ("y", "yes"):
+                    restart_modem()
+                else:
+                    print("[*] Dibatalkan")
         elif choice == "4":
             if ensure_login():
                 show_wlan_status()
