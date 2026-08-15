@@ -272,6 +272,19 @@ def get_wan_info():
     return None
 
 
+def get_public_ip():
+    """Cek IP publik dari komputer (di belakang NAT modem) via layanan eksternal."""
+    for url in ("https://api.ipify.org", "https://icanhazip.com", "https://ifconfig.me/ip"):
+        try:
+            resp = requests.get(url, timeout=5, verify=False)
+            ip = resp.text.strip()
+            if ip and ip.count(".") == 3 and all(p.isdigit() for p in ip.split(".")):
+                return ip
+        except Exception:
+            continue
+    return ""
+
+
 def print_wan_info(info):
     if not info:
         print("  Status: Tidak diketahui")
@@ -286,6 +299,11 @@ def print_wan_info(info):
         print("  Status: ENABLED (ON)")
     else:
         print("  Status: DISABLED (OFF)")
+    pub = get_public_ip()
+    if pub:
+        print(f"  IP Publik: {pub}")
+    else:
+        print("  IP Publik: (tidak dapat dicek)")
 
 
 # ================= WLAN =================
@@ -293,7 +311,6 @@ def print_wan_info(info):
 WLAN_2G_DOMAIN = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1"
 WLAN_5G_DOMAIN = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5"
 WLAN_BASIC_PAGE = "/html/amp/wlanbasic/WlanBasic.asp"
-WLAN_ADV_REQUEST = "html/amp/wlanadvance/wlanadvance.asp"
 
 CHANNEL_WIDTH = {
     "0": "Auto 20/40 MHz", "1": "20 MHz", "2": "40 MHz",
@@ -645,10 +662,118 @@ def set_wlan_enable(band, enable, ssid_domain=None):
 
 
 def set_wlan_adv(band, key, value, ssid_domain=None):
-    if set_wlan_fields(band, {key: value}, request_file=WLAN_ADV_REQUEST, ssid_domain=ssid_domain):
+    """Set parameter advanced (Channel/TransmitPower/X_HW_HT20/X_HW_Standard).
+
+    Meniru halaman WlanAdvance.asp: endpoint set.cgi?x=<domain>.X_HW_AdvanceConf
+    &y=<domain>&r=<Radio domain> (5G menambah z=WiFi.X_HW_GlobalConfig).
+    Body: y.* (WLANConfiguration) + x.* (DtimPeriod/BeaconPeriod/RTS/Frag)
+    + x.X_HW_Token param terakhir. Semua nilai advance dikirim (current + yang diganti).
+    """
+    domain = ssid_domain or wlan_domain(band)
+    info = get_wlan_info(band, domain=domain)
+    if not info:
+        print(f"  [!] Info WLAN {band} tidak didapat")
+        return False
+    radio_domain = (
+        "InternetGatewayDevice.LANDevice.1.WiFi.Radio.2" if band == "5G"
+        else "InternetGatewayDevice.LANDevice.1.WiFi.Radio.1")
+    global_domain = "InternetGatewayDevice.LANDevice.1.WiFi.X_HW_GlobalConfig"
+
+    token = ""
+    try:
+        page_url = f"{BASE_URL}/html/amp/wlanadvance/wlanadvance.asp"
+        if band == "5G":
+            page_url += "?5G"
+        resp = session.get(page_url, timeout=10, allow_redirects=True)
+        token = extract_token(resp.text)
+    except Exception:
+        pass
+    if not token:
+        token = get_token()
+    if not token:
+        print("  [!] Token tidak ditemukan")
+        return False
+
+    cur_channel = info.get("channel", "0")
+    cur_width = info.get("width", "2" if band == "2G" else "3")
+    cur_power = info.get("power", "100")
+    cur_mode = info.get("mode", "11bgn" if band == "2G" else "11ac")
+
+    if key == "Channel":
+        if value in ("0", "-1"):
+            y_channel, auto = "0", "1"
+        else:
+            y_channel, auto = value, "0"
+    else:
+        y_channel = cur_channel
+        auto = info.get("auto_channel", "0")
+    y_width = value if key == "X_HW_HT20" else cur_width
+    y_power = value if key == "TransmitPower" else cur_power
+    y_mode = value if key == "X_HW_Standard" else cur_mode
+
+    if band == "5G":
+        url = (f"{BASE_URL}/html/amp/wlanadvance/set.cgi"
+               f"?z={global_domain}"
+               f"&x={domain}.X_HW_AdvanceConf"
+               f"&y={domain}"
+               f"&r={radio_domain}"
+               f"&RequestFile=html/amp/wlanadv/WlanAdvance.asp")
+    else:
+        url = (f"{BASE_URL}/html/amp/wlanadvance/set.cgi"
+               f"?x={domain}.X_HW_AdvanceConf"
+               f"&y={domain}"
+               f"&r={radio_domain}"
+               f"&RequestFile=html/amp/wlanadv/WlanAdvance.asp")
+
+    body = {
+        "y.Channel": y_channel,
+        "y.AutoChannelEnable": auto,
+        "y.X_HW_HT20": y_width,
+        "y.TransmitPower": y_power,
+        "y.X_HW_Standard": y_mode,
+        "x.DtimPeriod": "1",
+        "x.BeaconPeriod": "100",
+        "x.RTSThreshold": "2346",
+        "x.FragThreshold": "2346",
+        "x.X_HW_Token": token,
+    }
+
+    referer = f"{BASE_URL}/html/amp/wlanadvance/wlanadvance.asp"
+    if band == "5G":
+        referer += "?5G"
+    else:
+        referer += "?2G"
+    try:
+        resp = session.post(url, data=body, timeout=30, headers={
+            "Referer": referer,
+            "Origin": BASE_URL,
+            "Content-Type": "application/x-www-form-urlencoded",
+        })
+    except Exception as e:
+        print(f"  [!] set error: {e} (radio {band} restart?). Verifikasi ulang...")
+        check = _get_wlan_info_retry(band, domain=domain)
+        if check:
+            info_key = {
+                "Channel": "channel",
+                "TransmitPower": "power",
+                "X_HW_HT20": "width",
+                "X_HW_Standard": "mode",
+            }
+            ok = str(check.get(info_key.get(key, key))) == str(value)
+            if ok:
+                print("  [?] Set terlanjur diterapkan (verifikasi cocok) — dianggap berhasil")
+                return True
+            print("  [!] Verifikasi gagal: nilai tidak cocok dengan yang diminta")
+        return False
+    debug_save(f"set_wlan_adv_{band}", resp.text)
+    if resp.status_code == 200 and "ErrCode" not in resp.text:
         print(f"[+] WLAN {band} {key}={value} berhasil")
         return True
-    print(f"[!] Set {key} gagal")
+    err = re.search(r'ErrCode\s*=\s*"([^"]+)"', resp.text)
+    if err:
+        print(f"  [!] Error: {err.group(1)}")
+    else:
+        print(f"  [!] Gagal (HTTP {resp.status_code})")
     return False
 
 
