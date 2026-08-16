@@ -423,7 +423,6 @@ def print_wlan_info(info):
     print(f"  Channel W  : {CHANNEL_WIDTH.get(width_val, width_val or '-')}")
     print(f"  TX Power   : {info.get('power', '-')}%")
     print(f"  Mode       : {info.get('mode', '-')}")
-    print(f"  Security   : {info.get('beacon', '-')} / {info.get('auth', '-')} / {info.get('encryption', '-')}")
     print(f"  Password   : {info.get('psk') or '********'}")
 
 
@@ -455,7 +454,6 @@ def show_wlan_status():
         ("Channel Width",   lambda d: wfmt(val(d, "width"))),
         ("TX Power",        lambda d: val(d, "power") + "%"),
         ("Mode",            lambda d: val(d, "mode")),
-        ("Security",        lambda d: f"{val(d,'beacon')} / {val(d,'auth')} / {val(d,'encryption')}"),
         ("Password",        lambda d: val(d, "psk") or "********"),
     ]
 
